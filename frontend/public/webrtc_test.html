@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Test</title>
+    <style>
+        body { font-family: sans-serif; background-color: #111; color: #fff; padding: 1em; }
+        video { background-color: #000; border: 1px solid #333; width: 640px; height: 480px; }
+        #status { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>WebRTC Backend Test</h1>
+    <p>Status: <span id="status">Not Connected</span></p>
+    <video id="video" autoplay playsinline muted></video>
+    <script>
+        const BACKEND_URL = "localhost:8001";
+        const WS_URL = `ws://${BACKEND_URL}`;
+        const API_URL = `http://${BACKEND_URL}/api`;
+
+        const videoElement = document.getElementById('video');
+        const statusElement = document.getElementById('status');
+
+        let pc = null;
+        let ws = null;
+        let cameraId = null;
+
+        async function startStream() {
+            try {
+                // 1. Fetch available cameras and pick the first one
+                statusElement.textContent = "Fetching cameras...";
+                const response = await fetch(`${API_URL}/cameras`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch cameras: ${response.statusText}`);
+                }
+                const cameras = await response.json();
+                if (cameras.length === 0) {
+                    statusElement.textContent = "Error: No cameras configured.";
+                    return;
+                }
+                cameraId = cameras[0].id;
+                console.log(`Using camera ID: ${cameraId}`);
+                statusElement.textContent = `Found camera: ${cameras[0].name} (${cameraId})`;
+
+                // 2. Ensure camera is started on the backend
+                statusElement.textContent = "Starting camera on backend...";
+                await fetch(`${API_URL}/cameras/${cameraId}/start`, { method: 'POST' });
+
+                // 3. Create Peer Connection
+                statusElement.textContent = "Creating WebRTC connection...";
+                pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                pc.ontrack = (event) => {
+                    console.log("Received remote track:", event.streams[0]);
+                    if (videoElement.srcObject !== event.streams[0]) {
+                        videoElement.srcObject = event.streams[0];
+                        statusElement.textContent = "Streaming!";
+                    }
+                };
+
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        console.log("Sending ICE candidate:", event.candidate);
+                        ws.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
+                    }
+                };
+
+                pc.onconnectionstatechange = () => {
+                    console.log(`Connection state changed to: ${pc.connectionState}`);
+                    statusElement.textContent = `Connection: ${pc.connectionState}`;
+                    if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                        stopStream();
+                    }
+                };
+
+                // 4. Connect WebSocket for signaling
+                statusElement.textContent = "Connecting WebSocket for signaling...";
+                ws = new WebSocket(`${WS_URL}/ws/webrtc/${cameraId}`);
+
+                ws.onopen = async () => {
+                    console.log("WebSocket connected.");
+                    statusElement.textContent = "WebSocket connected. Creating offer...";
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    console.log("Sending offer:", offer);
+                    ws.send(JSON.stringify({ type: 'offer', sdp: offer.sdp }));
+                };
+
+                ws.onmessage = async (event) => {
+                    const message = JSON.parse(event.data);
+                    console.log("Received WebSocket message:", message);
+
+                    if (message.type === 'answer') {
+                        statusElement.textContent = "Received answer. Setting remote description...";
+                        try {
+                            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: message.sdp }));
+                        } catch (e) {
+                            console.error("Error setting remote description:", e);
+                            statusElement.textContent = "Error: Failed to set remote description.";
+                        }
+                    } else if (message.type === 'ice-candidate' && message.candidate) {
+                        try {
+                            await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
+                        } catch (e) {
+                            console.error("Error adding received ICE candidate:", e);
+                        }
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error("WebSocket error:", error);
+                    statusElement.textContent = "Error: WebSocket connection failed.";
+                };
+
+                ws.onclose = () => {
+                    console.log("WebSocket disconnected.");
+                    if(pc.connectionState !== 'connected') {
+                       statusElement.textContent = "WebSocket disconnected.";
+                    }
+                };
+
+            } catch (error) {
+                console.error("Error starting stream:", error);
+                statusElement.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        function stopStream() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            if (videoElement.srcObject) {
+                videoElement.srcObject.getTracks().forEach(track => track.stop());
+                videoElement.srcObject = null;
+            }
+            statusElement.textContent = "Disconnected.";
+        }
+
+        window.onload = startStream;
+        window.onbeforeunload = stopStream;
+
+    </script>
+</body>
+</html>

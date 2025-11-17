@@ -12,3 +12,4 @@ easyocr
 numpy<2.0.0
 requests
 websockets
+aiortc
