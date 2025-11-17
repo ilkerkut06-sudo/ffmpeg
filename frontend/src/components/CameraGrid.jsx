@@ -71,9 +71,11 @@ const CameraBox = ({ camera, position }) => {
       websocket.current = new WebSocket(`${WS_URL}/api/ws/webrtc/${camera.id}`);
 
       websocket.current.onopen = async () => {
-        const offer = await peerConnection.current.createOffer();
-        await peerConnection.current.setLocalDescription(offer);
-        websocket.current.send(JSON.stringify({ type: 'offer', sdp: offer.sdp }));
+        if (peerConnection.current) {
+          const offer = await peerConnection.current.createOffer();
+          await peerConnection.current.setLocalDescription(offer);
+          websocket.current.send(JSON.stringify({ type: 'offer', sdp: offer.sdp }));
+        }
       };
 
       websocket.current.onmessage = async (event) => {

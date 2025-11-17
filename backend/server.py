@@ -755,7 +755,8 @@ async def websocket_webrtc(websocket: WebSocket, camera_id: str):
         logger.info(f"WebRTC connection state is {pc.connectionState}")
         if pc.connectionState == "failed" or pc.connectionState == "closed":
             await pc.close()
-            del webrtc_connections[websocket]
+            if websocket in webrtc_connections:
+                del webrtc_connections[websocket]
             if "webrtc_track" in active_cameras.get(camera_id, {}):
                 del active_cameras[camera_id]["webrtc_track"]
 
