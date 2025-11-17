@@ -1,0 +1,1 @@
+start "EVO PLAKA TANIMA - ARKAUC" cmd /k "call venv\Scripts\activate && uvicorn server:app --host 0.0.0.0 --port 8001 --reload"

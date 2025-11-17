@@ -1,0 +1,1 @@
+start "EVO PLAKA OKUMA - ON UC" cmd /k "npm start"

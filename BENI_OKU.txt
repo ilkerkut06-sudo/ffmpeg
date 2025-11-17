@@ -1,0 +1,56 @@
+╔════════════════════════════════════════════════════════════════════════╗
+║                  PLAKA OKUMA SİSTEMİ - HIZLI BAŞLANGIÇ                ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+
+═══════════════════════════════════════════════════════════════════════
+🚀 İLK KURULUM (Sadece 1 kez)
+═══════════════════════════════════════════════════════════════════════
+
+1. Python, Node.js ve MongoDB'yi kurun
+   (Detaylar için: KURULUM_REHBERI.txt)
+
+2. SETUP_AND_START.bat dosyasına ÇİFT TIKLAYIN
+
+3. Bekleyin (10-20 dakika)
+
+4. İşlem bitince 2 terminal penceresi açılır
+
+5. Tarayıcıda http://localhost:3000 açılır
+
+✅ KURULUM TAMAM!
+
+
+═══════════════════════════════════════════════════════════════════════
+▶️  NORMAL KULLANIM (2. kez ve sonrası)
+═══════════════════════════════════════════════════════════════════════
+
+1. START_ALL.bat dosyasına ÇİFT TIKLAYIN
+
+2. 2 terminal penceresi açılır (KAPATMAYIN!)
+
+3. http://localhost:3000 açılır
+
+4. Kullanmaya başlayın!
+
+
+═══════════════════════════════════════════════════════════════════════
+📁 DOSYALAR
+═══════════════════════════════════════════════════════════════════════
+
+✅ BENI_OKU.txt               → Bu dosya (hızlı başlangıç)
+✅ KURULUM_REHBERI.txt         → Detaylı rehber ve sorun giderme
+✅ SETUP_AND_START.bat         → İlk kurulum (sadece 1 kez)
+✅ START_ALL.bat               → Sistemi başlat (her seferinde)
+✅ backend\START_BACKEND.bat   → Sadece backend başlat
+✅ frontend\START_FRONTEND.bat → Sadece frontend başlat
+
+
+═══════════════════════════════════════════════════════════════════════
+❌ SORUN YAŞIYORSANIZ
+═══════════════════════════════════════════════════════════════════════
+
+KURULUM_REHBERI.txt dosyasını açın ve "Sorun Giderme" bölümüne bakın.
+
+
+═══════════════════════════════════════════════════════════════════════

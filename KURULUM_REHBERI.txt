@@ -1,0 +1,304 @@
+╔════════════════════════════════════════════════════════════════════════╗
+║                  PLAKA OKUMA SİSTEMİ - KURULUM REHBERİ                ║
+║                     License Plate Recognition System                   ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+                          📖 BASIT KURULUM 📖
+
+
+═══════════════════════════════════════════════════════════════════════
+📋 ÖNEMLİ DOSYALAR (SADECE 4 DOSYA!)
+═══════════════════════════════════════════════════════════════════════
+
+✅ SETUP_AND_START.bat       → İLK KURULUM (sadece 1 kez)
+✅ START_ALL.bat              → SİSTEMİ BAŞLAT (her seferinde)
+✅ backend\START_BACKEND.bat  → Sadece Backend
+✅ frontend\START_FRONTEND.bat → Sadece Frontend
+
+
+═══════════════════════════════════════════════════════════════════════
+🚀 ADIM ADIM KURULUM (İLK KEZ)
+═══════════════════════════════════════════════════════════════════════
+
+ADIM 1: YAZILIM GEREKSİNİMLERİ
+─────────────────────────────────────────────────────────────────────
+
+Sisteminizde şunlar kurulu OLMALI:
+
+  ✓ Python 3.8 veya üzeri
+    → İndirmek için: https://www.python.org/downloads/
+    → Kurulumda "Add Python to PATH" seçeneğini işaretleyin!
+    
+  ✓ Node.js 14 veya üzeri  
+    → İndirmek için: https://nodejs.org/
+    → LTS (Long Term Support) versiyonunu seçin
+    
+  ✓ MongoDB 4.4 veya üzeri
+    → İndirmek için: https://www.mongodb.com/try/download/community
+    → Windows Service olarak kurun
+
+⚠️  ÖNEMLİ: Hepsini yükledikten sonra bilgisayarı yeniden başlatın!
+
+
+ADIM 2: İLK KURULUM
+─────────────────────────────────────────────────────────────────────
+
+1. SETUP_AND_START.bat dosyasına ÇİFT TIKLAYIN
+
+2. Script otomatik olarak:
+   • Python paketlerini yükler (5-10 dakika)
+   • Node.js paketlerini yükler (5-10 dakika)
+   • MongoDB'yi başlatır
+   • 2 terminal penceresi açar (Backend ve Frontend)
+   • Tarayıcıda http://localhost:3000 açar
+
+3. İşlem tamamlandığında 2 terminal penceresi göreceksiniz:
+   
+   🟢 Yeşil Terminal (Backend):
+      ✅ SUNUCU HAZIR!
+      INFO: Uvicorn running on http://0.0.0.0:8001
+   
+   🔵 Mavi Terminal (Frontend):
+      Compiled successfully!
+      Local: http://localhost:3000
+
+4. Tarayıcıda sistem otomatik açılır → http://localhost:3000
+
+✅ KURULUM TAMAMLANDI!
+
+
+═══════════════════════════════════════════════════════════════════════
+🎯 NORMAL KULLANIM (2. kez ve sonrası)
+═══════════════════════════════════════════════════════════════════════
+
+Artık sistemi başlatmak çok kolay:
+
+1. START_ALL.bat dosyasına ÇİFT TIKLAYIN
+
+2. 2 terminal penceresi açılır (Backend + Frontend)
+
+3. Tarayıcıda http://localhost:3000 açılır
+
+4. Kullanmaya başlayın! 🎉
+
+⚠️  KAPALI TUTMAYIN: Terminal pencerelerini kapatmayın, sistem 
+    çalışırken açık kalmalılar!
+
+
+═══════════════════════════════════════════════════════════════════════
+🛑 SİSTEMİ DURDURMAK
+═══════════════════════════════════════════════════════════════════════
+
+1. Backend terminalinde → Ctrl + C
+2. Frontend terminalinde → Ctrl + C
+3. Terminal pencerelerini kapatın
+
+Veya direkt pencereleri kapatabilirsiniz.
+
+
+═══════════════════════════════════════════════════════════════════════
+❌ SORUN GİDERME
+═══════════════════════════════════════════════════════════════════════
+
+PROBLEM 1: "Python bulunamadı" hatası
+──────────────────────────────────────────────────────────────────
+
+  ÇÖZÜM:
+  1. Python'u yükleyin: https://www.python.org/downloads/
+  2. Kurulumda "Add Python to PATH" seçeneğini işaretleyin
+  3. Bilgisayarı yeniden başlatın
+  4. CMD açıp "python --version" yazarak test edin
+
+
+PROBLEM 2: "Node.js veya npm bulunamadı" hatası
+──────────────────────────────────────────────────────────────────
+
+  ÇÖZÜM:
+  1. Node.js'i yükleyin: https://nodejs.org/
+  2. LTS versiyonunu seçin
+  3. Bilgisayarı yeniden başlatın
+  4. CMD açıp "node --version" yazarak test edin
+
+
+PROBLEM 3: "MongoDB bağlantı hatası"
+──────────────────────────────────────────────────────────────────
+
+  ÇÖZÜM:
+  1. Komut istemini yönetici olarak açın
+  2. Şu komutu çalıştırın: net start MongoDB
+  3. Backend'i tekrar başlatın
+
+
+PROBLEM 4: Backend hemen kapanıyor
+──────────────────────────────────────────────────────────────────
+
+  ÇÖZÜM:
+  Manuel başlatma yapın:
+  
+  1. CMD açın
+  2. Şu komutları sırayla çalıştırın:
+  
+     cd "C:\Users\KULLANICI_ADI\...\plaka-main\backend"
+     .\venv\Scripts\activate
+     uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+  
+  3. Hata mesajlarını okuyun ve not alın
+  4. MongoDB'nin çalıştığından emin olun
+
+
+PROBLEM 5: "Port 8001 veya 3000 zaten kullanımda"
+──────────────────────────────────────────────────────────────────
+
+  ÇÖZÜM:
+  1. Görev Yöneticisi'ni açın (Ctrl+Shift+Esc)
+  2. "python.exe" ve "node.exe" işlemlerini bulun
+  3. Sağ tık → İşlemi Sonlandır
+  4. Sistemi tekrar başlatın
+
+
+PROBLEM 6: Frontend açılıyor ama "Backend'e bağlanılamıyor"
+──────────────────────────────────────────────────────────────────
+
+  ÇÖZÜM:
+  1. Backend terminalinin açık ve çalışır durumda olduğunu kontrol edin
+  2. Backend'de "✅ SUNUCU HAZIR!" mesajını gördüğünüzden emin olun
+  3. Tarayıcıda Ctrl+Shift+R yaparak cache'i temizleyin
+  4. Frontend'i kapatıp yeniden başlatın
+
+
+═══════════════════════════════════════════════════════════════════════
+⚙️  AYARLAR
+═══════════════════════════════════════════════════════════════════════
+
+Port Değiştirmek İsterseniz:
+────────────────────────────────────────────────────────────────
+
+Backend Portu (Varsayılan: 8001):
+  1. backend\.env dosyasını açın
+  2. PORT=8001 satırını bulun
+  3. İstediğiniz porta değiştirin (örn: PORT=8000)
+  4. backend\.env dosyasını kaydedin
+  
+Frontend Backend URL (Varsayılan: http://localhost:8001):
+  1. frontend\.env dosyasını açın
+  2. REACT_APP_BACKEND_URL=http://localhost:8001 satırını bulun
+  3. Backend ile aynı porta ayarlayın (örn: http://localhost:8000)
+  4. frontend\.env dosyasını kaydedin
+  
+⚠️  ÖNEMLİ: .env dosyalarını değiştirdikten sonra Backend ve 
+    Frontend'i KAPATIP TEKRAR BAŞLATMALISINIZ!
+
+
+═══════════════════════════════════════════════════════════════════════
+📚 SİSTEM BİLGİLERİ
+═══════════════════════════════════════════════════════════════════════
+
+URL'ler:
+  • Frontend:  http://localhost:3000
+  • Backend:   http://localhost:8001
+  • MongoDB:   mongodb://localhost:27017
+
+Klasör Yapısı:
+  plaka-main/
+  ├─ backend/          → Python FastAPI backend
+  │  ├─ venv/          → Virtual environment
+  │  ├─ server.py      → Ana backend dosyası
+  │  ├─ .env           → Backend ayarları
+  │  └─ START_BACKEND.bat
+  │
+  ├─ frontend/         → React frontend
+  │  ├─ src/           → Kaynak kodlar
+  │  ├─ node_modules/  → Node.js paketleri
+  │  ├─ .env           → Frontend ayarları
+  │  └─ START_FRONTEND.bat
+  │
+  ├─ SETUP_AND_START.bat → İlk kurulum
+  └─ START_ALL.bat       → Normal başlatma
+
+
+═══════════════════════════════════════════════════════════════════════
+🎓 İLK KULLANIMDA YAPIN
+═══════════════════════════════════════════════════════════════════════
+
+Sistem çalıştıktan sonra:
+
+1. "Site Tanımlama" sayfasından sitenizi ekleyin
+   (Örn: Site adı, bloklar, daire sayıları)
+
+2. "Kapı Yönetimi" sayfasından kapılarınızı tanımlayın
+   (Örn: Ana Giriş Kapısı, IP: 192.168.1.100)
+
+3. "Kamera Yönetimi" sayfasından kameralarınızı ekleyin
+   (Örn: Tip: webcam, URL: 0, Kapı seçin)
+
+4. "Plaka Yönetimi" sayfasından araç plakalarını kaydedin
+   (Site, blok, daire, plaka numarası, durum)
+
+5. Ana ekranda kamera görüntülerini kontrol edin
+
+
+═══════════════════════════════════════════════════════════════════════
+🔍 HIZLI KONTROL
+═══════════════════════════════════════════════════════════════════════
+
+Sistem Çalışıyor mu Kontrol:
+────────────────────────────────────────────────────────────────
+
+✓ Backend terminali açık mı?
+  → Yeşil renkli terminal, "✅ SUNUCU HAZIR!" mesajı var mı?
+
+✓ Frontend terminali açık mı?
+  → Mavi renkli terminal, "Compiled successfully!" mesajı var mı?
+
+✓ Tarayıcıda sayfa açılıyor mu?
+  → http://localhost:3000 adresini açın
+  → Ana ekran (kamera grid'i) görünüyor mu?
+
+✓ Backend'e bağlanıyor mu?
+  → Sol menüde "Site Tanımlama" tıklayın
+  → Sayfa açılıyor mu? (Hata mesajı yok mu?)
+
+
+═══════════════════════════════════════════════════════════════════════
+💡 İPUÇLARI
+═══════════════════════════════════════════════════════════════════════
+
+• Terminal pencerelerini asla KAPATMAYIN! Sistem çalışırken açık 
+  kalmalılar.
+
+• İlk kurulum 10-20 dakika sürebilir (internet hızınıza bağlı).
+
+• Kamera eklerken tarayıcınız izin isteyecek, "İzin Ver" deyin.
+
+• Plaka tanıma kalitesi kamera kalitesine bağlıdır. İyi ışık 
+  koşullarında test edin.
+
+• Backend veya Frontend'i değiştirdiyseniz, her ikisini de yeniden 
+  başlatın.
+
+• .env dosyalarını değiştirdikten sonra mutlaka servisleri yeniden 
+  başlatın!
+
+
+═══════════════════════════════════════════════════════════════════════
+📝 ÖZET - 3 ADIMDA BAŞLANGIÇ
+═══════════════════════════════════════════════════════════════════════
+
+İLK KEZ:
+  1. Python, Node.js, MongoDB'yi kurun
+  2. SETUP_AND_START.bat çalıştırın
+  3. http://localhost:3000 açın
+
+SONRASINDA:
+  1. START_ALL.bat çalıştırın
+  2. Terminal pencerelerini açık tutun
+  3. http://localhost:3000 kullanın
+
+
+═══════════════════════════════════════════════════════════════════════
+
+Başarılar! 🚀
+
+Sorun yaşarsanız yukarıdaki "Sorun Giderme" bölümüne bakın.
+
+═══════════════════════════════════════════════════════════════════════

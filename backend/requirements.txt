@@ -1,0 +1,14 @@
+fastapi
+motor
+pydantic
+python-dotenv
+uvicorn[standard]
+opencv-python-headless
+psutil
+ultralytics
+pytesseract
+pillow
+easyocr
+numpy<2.0.0
+requests
+websockets
