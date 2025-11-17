@@ -67,6 +67,12 @@ const CameraBox = ({ camera, position }) => {
         }
       };
 
+      peerConnection.current.onicecandidate = (event) => {
+        if (event.candidate) {
+          websocket.current.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
+        }
+      };
+
       // Step 3: WebSocket for signaling
       websocket.current = new WebSocket(`${WS_URL}/api/ws/webrtc/${camera.id}`);
 
@@ -81,7 +87,15 @@ const CameraBox = ({ camera, position }) => {
       websocket.current.onmessage = async (event) => {
         const message = JSON.parse(event.data);
         if (message.type === 'answer') {
-          await peerConnection.current.setRemoteDescription(message);
+          const remoteDesc = new RTCSessionDescription(message);
+          await peerConnection.current.setRemoteDescription(remoteDesc);
+        } else if (message.type === 'ice-candidate' && message.candidate) {
+          try {
+            const candidate = new RTCIceCandidate(message.candidate);
+            await peerConnection.current.addIceCandidate(candidate);
+          } catch (e) {
+            console.error('Error adding received ice candidate', e);
+          }
         }
       };
 

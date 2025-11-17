@@ -760,6 +760,18 @@ async def websocket_webrtc(websocket: WebSocket, camera_id: str):
             if "webrtc_track" in active_cameras.get(camera_id, {}):
                 del active_cameras[camera_id]["webrtc_track"]
 
+    @pc.on("icecandidate")
+    async def on_icecandidate(candidate):
+        if candidate:
+            await websocket.send_json({
+                "type": "ice-candidate",
+                "candidate": {
+                    "sdp": candidate.sdp,
+                    "sdpMid": candidate.sdpMid,
+                    "sdpMLineIndex": candidate.sdpMLineIndex,
+                }
+            })
+
     try:
         while True:
             message = await websocket.receive_json()
@@ -771,9 +783,14 @@ async def websocket_webrtc(websocket: WebSocket, camera_id: str):
                 await pc.setLocalDescription(answer)
                 await websocket.send_json({"type": "answer", "sdp": pc.localDescription.sdp})
 
-            elif message["type"] == "ice-candidate":
-                # This part is often not needed if ICE gathering is handled automatically
-                pass
+            elif message["type"] == "ice-candidate" and message["candidate"]:
+                from aiortc import RTCIceCandidate
+                candidate = RTCIceCandidate(
+                    sdp=message["candidate"]["sdp"],
+                    sdpMid=message["candidate"]["sdpMid"],
+                    sdpMLineIndex=message["candidate"]["sdpMLineIndex"]
+                )
+                await pc.addIceCandidate(candidate)
 
     except WebSocketDisconnect:
         logger.info(f"WebRTC client for camera {camera_id} disconnected.")
