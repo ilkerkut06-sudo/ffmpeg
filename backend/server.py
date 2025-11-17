@@ -748,7 +748,7 @@ async def websocket_webrtc(websocket: WebSocket, camera_id: str):
     # Create a video track and add it to the peer connection
     video_track = CameraVideoStreamTrack(camera_id)
     active_cameras[camera_id]["webrtc_track"] = video_track
-    pc.addTrack(video_track)
+    pc.addTransceiver(video_track, direction="sendonly")
 
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
@@ -766,7 +766,7 @@ async def websocket_webrtc(websocket: WebSocket, camera_id: str):
             await websocket.send_json({
                 "type": "ice-candidate",
                 "candidate": {
-                    "sdp": candidate.sdp,
+                    "candidate": candidate.sdp,
                     "sdpMid": candidate.sdpMid,
                     "sdpMLineIndex": candidate.sdpMLineIndex,
                 }
@@ -786,7 +786,7 @@ async def websocket_webrtc(websocket: WebSocket, camera_id: str):
             elif message["type"] == "ice-candidate" and message["candidate"]:
                 from aiortc import RTCIceCandidate
                 candidate = RTCIceCandidate(
-                    sdp=message["candidate"]["sdp"],
+                    sdp=message["candidate"]["candidate"],
                     sdpMid=message["candidate"]["sdpMid"],
                     sdpMLineIndex=message["candidate"]["sdpMLineIndex"]
                 )
