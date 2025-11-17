@@ -7,6 +7,8 @@ import { toast } from "sonner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+// WebSocket URL'sini oluştururken, backend'deki /api prefix'ini koruyoruz.
+// Backend router'ı bu şekilde yapılandırıldığı için bu kullanım doğru.
 const WS_URL = BACKEND_URL.replace(/^http/, 'ws');
 
 const CameraBox = ({ camera, position }) => {
@@ -19,6 +21,8 @@ const CameraBox = ({ camera, position }) => {
   const retryTimeout = useRef(null);
 
   const stopCameraStream = useCallback(() => {
+    // Tüm aktif bağlantıları ve zamanlayıcıları temizle
+    clearTimeout(retryTimeout.current);
     if (peerConnection.current) {
       peerConnection.current.close();
       peerConnection.current = null;
@@ -31,52 +35,57 @@ const CameraBox = ({ camera, position }) => {
       videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       videoRef.current.srcObject = null;
     }
-    clearTimeout(retryTimeout.current);
   }, []);
 
   const startCameraStream = useCallback(async () => {
     if (!camera || isConnecting) return;
+
     setIsConnecting(true);
     setStatus("connecting");
-    stopCameraStream();
+    stopCameraStream(); // Yeni bir bağlantıdan önce mevcut olanı temizle
 
     try {
-      // Step 1: Ensure camera is active on the backend
+      // 1. Backend'de kameranın aktif olduğundan emin ol
       await axios.post(`${API}/cameras/${camera.id}/start`);
 
-      // Step 2: Set up WebRTC
+      // 2. WebRTC Peer Connection'ı kur
       peerConnection.current = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
       });
 
+      // 3. Gelen video akışını (track) dinle ve video elementine bağla
       peerConnection.current.ontrack = (event) => {
-        if (videoRef.current) {
+        if (videoRef.current && event.streams && event.streams[0]) {
           videoRef.current.srcObject = event.streams[0];
           setStatus("monitoring");
           setIsActive(true);
         }
       };
 
+      // 4. ICE adaylarını backend'e gönder
+      peerConnection.current.onicecandidate = (event) => {
+        if (event.candidate && websocket.current && websocket.current.readyState === WebSocket.OPEN) {
+          websocket.current.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
+        }
+      };
+
+      // 5. Bağlantı durumu değişikliklerini izle ve yeniden bağlanmayı yönet
       peerConnection.current.onconnectionstatechange = () => {
         const state = peerConnection.current?.connectionState;
         if (state === "failed" || state === "disconnected" || state === "closed") {
           setIsActive(false);
           setStatus("stopped");
-          // Schedule a retry
+          // 5 saniye sonra yeniden bağlanmayı dene
+          clearTimeout(retryTimeout.current);
           retryTimeout.current = setTimeout(startCameraStream, 5000);
         }
       };
 
-      peerConnection.current.onicecandidate = (event) => {
-        if (event.candidate) {
-          websocket.current.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
-        }
-      };
-
-      // Step 3: WebSocket for signaling
+      // 6. Sinyalleşme için WebSocket bağlantısını başlat
       websocket.current = new WebSocket(`${WS_URL}/api/ws/webrtc/${camera.id}`);
 
       websocket.current.onopen = async () => {
+        // Yarış durumunu önlemek için bağlantının hala var olup olmadığını kontrol et
         if (peerConnection.current) {
           const offer = await peerConnection.current.createOffer();
           await peerConnection.current.setLocalDescription(offer);
@@ -85,21 +94,28 @@ const CameraBox = ({ camera, position }) => {
       };
 
       websocket.current.onmessage = async (event) => {
+        // Yarış durumunu önlemek için bağlantının hala var olup olmadığını kontrol et
+        if (!peerConnection.current) return;
+
         const message = JSON.parse(event.data);
+
         if (message.type === 'answer') {
-          const remoteDesc = new RTCSessionDescription(message);
-          await peerConnection.current.setRemoteDescription(remoteDesc);
+          // *** ANA DÜZELTME: "answer" mesajı doğru formatta set ediliyor ***
+          // Backend'den gelen { type: 'answer', sdp: '...' } formatındaki mesaj
+          // doğrudan RTCSessionDescription olarak kullanılabilir.
+          await peerConnection.current.setRemoteDescription(new RTCSessionDescription(message));
         } else if (message.type === 'ice-candidate' && message.candidate) {
+          // Backend'den gelen ICE adayını bağlantıya ekle
           try {
-            const candidate = new RTCIceCandidate(message.candidate);
-            await peerConnection.current.addIceCandidate(candidate);
+            await peerConnection.current.addIceCandidate(new RTCIceCandidate(message.candidate));
           } catch (e) {
-            console.error('Error adding received ice candidate', e);
+            console.error('Alınan ICE adayı eklenirken hata oluştu:', e);
           }
         }
       };
 
-      websocket.current.onerror = () => {
+      websocket.current.onerror = (error) => {
+        console.error("WebSocket hatası:", error);
         setStatus("error");
         setIsActive(false);
       };
@@ -116,6 +132,7 @@ const CameraBox = ({ camera, position }) => {
 
   const stopCamera = async () => {
     try {
+      // Backend'e kamerayı durdurma isteği gönder
       await axios.post(`${API}/cameras/${camera.id}/stop`);
       stopCameraStream();
       setIsActive(false);
@@ -126,13 +143,14 @@ const CameraBox = ({ camera, position }) => {
     }
   };
 
+  // Bileşen yüklendiğinde veya kamera değiştiğinde akışı başlat
   useEffect(() => {
     if (camera) {
       startCameraStream();
     }
+    // Bileşen kaldırıldığında tüm bağlantıları temizle
     return () => {
       stopCameraStream();
-      clearTimeout(retryTimeout.current);
     };
   }, [camera, startCameraStream, stopCameraStream]);
 
@@ -181,7 +199,6 @@ const CameraBox = ({ camera, position }) => {
           </div>
         )}
 
-        {/* Status indicator */}
         {isActive && (
           <div className="absolute top-2 left-2 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full">
             <div className="h-2 w-2 rounded-full bg-green-500 pulse" />
@@ -189,10 +206,8 @@ const CameraBox = ({ camera, position }) => {
           </div>
         )}
 
-        {/* Camera controls */}
         <div className="absolute top-2 right-2">
           <Button
-            data-testid={`camera-toggle-${position}`}
             size="sm"
             variant="secondary"
             onClick={toggleCamera}
@@ -203,7 +218,6 @@ const CameraBox = ({ camera, position }) => {
         </div>
       </div>
 
-      {/* Camera info */}
       <div className="p-3 space-y-1">
         <h3 className="font-semibold text-sm">{camera.name}</h3>
         <div className="flex items-center justify-between text-xs text-zinc-500">
