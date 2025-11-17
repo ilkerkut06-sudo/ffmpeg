@@ -20,6 +20,10 @@ from collections import deque
 import requests
 import base64
 import re
+from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc.contrib.media import MediaStreamTrack
+from av import VideoFrame
+import fractions
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -167,6 +171,48 @@ class SettingsUpdate(BaseModel):
 active_cameras: Dict[str, Any] = {}
 websocket_clients: List[WebSocket] = []
 detection_buffer = deque(maxlen=20)
+webrtc_connections: Dict[str, RTCPeerConnection] = {}
+
+# ==================== WEBRTC IMPLEMENTATION ====================
+
+class CameraVideoStreamTrack(MediaStreamTrack):
+    """
+    A video track that streams frames from a camera.
+    """
+    kind = "video"
+    _start_time: float
+
+    def __init__(self, camera_id: str):
+        super().__init__()
+        self.camera_id = camera_id
+        self._queue = asyncio.Queue()
+        self.last_frame = None
+
+    async def recv(self):
+        if not self.last_frame:
+            self.last_frame = await self._queue.get()
+        return self.last_frame
+
+    def add_frame(self, frame: np.ndarray):
+        """Adds a new frame to the track."""
+        if not hasattr(self, "_start_time"):
+            self._start_time = asyncio.get_event_loop().time()
+
+        # Convert numpy array to VideoFrame
+        pts = int((asyncio.get_event_loop().time() - self._start_time) * 1000)
+        video_frame = VideoFrame.from_ndarray(frame, format="bgr24")
+        video_frame.pts = pts
+        video_frame.time_base = fractions.Fraction(1, 1000)
+
+        # Put frame into queue and keep the latest
+        if self._queue.qsize() > 0:
+            try:
+                self._queue.get_nowait()  # Discard old frame
+            except asyncio.QueueEmpty:
+                pass
+        self._queue.put_nowait(video_frame)
+        self.last_frame = video_frame
+
 
 # ==================== PLATE RECOGNITION ENGINE ====================
 
@@ -258,40 +304,65 @@ class PlateRecognitionEngine:
             import pytesseract
             from PIL import Image
 
-            # 1. Resize to a larger, more optimal resolution
+            # 1. Resize for consistency
             height, width = plate_img.shape[:2]
             if height == 0 or width == 0: return None
-            target_height = 100
+            target_height = 120  # Increased for better quality
             scale = target_height / height
-            img = cv2.resize(plate_img, (int(width * scale), target_height), interpolation=cv2.INTER_CUBIC)
+            img = cv2.resize(plate_img, (int(width * scale), target_height), interpolation=cv2.INTER_LANCZOS4)
 
             # 2. Convert to grayscale
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-            # 3. Apply bilateral filter for noise reduction while preserving edges
-            denoised = cv2.bilateralFilter(gray, 9, 75, 75)
+            # 3. Enhance contrast (CLAHE)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            contrast_enhanced = clahe.apply(gray)
 
-            # 4. Apply adaptive thresholding
-            thresh = cv2.adaptiveThreshold(denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+            # 4. Denoise
+            denoised = cv2.fastNlMeansDenoising(contrast_enhanced, None, 10, 7, 21)
 
-            # 5. Invert the image (Tesseract prefers black text on white background)
-            inverted_thresh = cv2.bitwise_not(thresh)
+            # 5. Sharpening
+            kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+            sharpened = cv2.filter2D(denoised, -1, kernel)
 
-            # 6. Use morphological opening to remove small noise
-            kernel = np.ones((2,2),np.uint8)
-            cleaned_img = cv2.morphologyEx(inverted_thresh, cv2.MORPH_OPEN, kernel)
+            # 6. Adaptive Thresholding
+            thresh = cv2.adaptiveThreshold(sharpened, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 4)
 
-            # 7. Perform OCR
+            # 7. Deskew (correcting tilted plates)
+            coords = cv2.findNonZero(thresh)
+            if coords is not None:
+                angle = cv2.minAreaRect(coords)[-1]
+                if angle < -45:
+                    angle = -(90 + angle)
+                else:
+                    angle = -angle
+                (h, w) = thresh.shape[:2]
+                center = (w // 2, h // 2)
+                M = cv2.getRotationMatrix2D(center, angle, 1.0)
+                thresh = cv2.warpAffine(thresh, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+            # 8. Morphological operations
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+            cleaned_img = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+
+            # 9. Perform OCR
             text = pytesseract.image_to_string(
                 Image.fromarray(cleaned_img),
                 config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
                 lang='tur+eng'
             )
             
-            # Clean text and validate
+            # Clean and validate text
             text = ''.join(c for c in text if c.isalnum()).upper()
             
-            return self.validate_and_correct_plate(text)
+            validated_plate = self.validate_and_correct_plate(text)
+            if validated_plate:
+                logger.info(f"OCR Result: '{text}' -> Validated: '{validated_plate}'")
+                return validated_plate
+            else:
+                logger.warning(f"OCR Result: '{text}' -> Failed validation")
+                return None
+
         except Exception as e:
             logger.error(f"Tesseract OCR error: {e}")
             return None
@@ -492,13 +563,17 @@ async def process_camera_stream(camera_id: str, camera_data: Dict[str, Any]):
                     except:
                         pass
             
-            # Store latest frame
+            # Add frame to WebRTC track if it exists
+            if "webrtc_track" in active_cameras[camera_id]:
+                active_cameras[camera_id]["webrtc_track"].add_frame(frame)
+
+            # Store latest frame for MJPEG fallback (optional)
             _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
             active_cameras[camera_id]["latest_frame"] = buffer.tobytes()
             active_cameras[camera_id]["status"] = status if detection_result else "monitoring"
-            
+
             frame_count += 1
-            await asyncio.sleep(1.0 / fps)
+            await asyncio.sleep(1.0 / max(fps, 1))
             
         except Exception as e:
             logger.error(f"Camera {camera_id} error: {e}")
@@ -655,22 +730,77 @@ async def stop_camera(camera_id: str):
         del active_cameras[camera_id]
     return {"message": "Camera stopped"}
 
-@api_router.get("/cameras/{camera_id}/stream")
-async def get_camera_stream(camera_id: str):
+@api_router.websocket("/ws/webrtc/{camera_id}")
+async def websocket_webrtc(websocket: WebSocket, camera_id: str):
+    """
+    WebSocket endpoint for WebRTC signaling.
+    """
+    await websocket.accept()
+
     if camera_id not in active_cameras:
-        raise HTTPException(status_code=404, detail="Camera not active")
-    
-    def generate():
-        while camera_id in active_cameras:
-            frame = active_cameras[camera_id].get("latest_frame")
-            if frame:
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-            else:
-                import time
-                time.sleep(0.1)
-    
-    return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
+        logger.warning(f"Attempted WebRTC connection to non-active camera: {camera_id}")
+        await websocket.close(code=1008)
+        return
+
+    pc = RTCPeerConnection()
+    webrtc_connections[websocket] = pc
+
+    # Create a video track and add it to the peer connection
+    video_track = CameraVideoStreamTrack(camera_id)
+    active_cameras[camera_id]["webrtc_track"] = video_track
+    pc.addTransceiver(video_track, direction="sendonly")
+
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange():
+        logger.info(f"WebRTC connection state is {pc.connectionState}")
+        if pc.connectionState == "failed" or pc.connectionState == "closed":
+            await pc.close()
+            if websocket in webrtc_connections:
+                del webrtc_connections[websocket]
+            if "webrtc_track" in active_cameras.get(camera_id, {}):
+                del active_cameras[camera_id]["webrtc_track"]
+
+    @pc.on("icecandidate")
+    async def on_icecandidate(candidate):
+        if candidate:
+            await websocket.send_json({
+                "type": "ice-candidate",
+                "candidate": {
+                    "candidate": candidate.sdp,
+                    "sdpMid": candidate.sdpMid,
+                    "sdpMLineIndex": candidate.sdpMLineIndex,
+                }
+            })
+
+    try:
+        while True:
+            message = await websocket.receive_json()
+
+            if message["type"] == "offer":
+                offer = RTCSessionDescription(sdp=message["sdp"], type=message["type"])
+                await pc.setRemoteDescription(offer)
+                answer = await pc.createAnswer()
+                await pc.setLocalDescription(answer)
+                await websocket.send_json({"type": "answer", "sdp": pc.localDescription.sdp})
+
+            elif message["type"] == "ice-candidate" and message["candidate"]:
+                from aiortc import RTCIceCandidate
+                candidate = RTCIceCandidate(
+                    sdp=message["candidate"]["candidate"],
+                    sdpMid=message["candidate"]["sdpMid"],
+                    sdpMLineIndex=message["candidate"]["sdpMLineIndex"]
+                )
+                await pc.addIceCandidate(candidate)
+
+    except WebSocketDisconnect:
+        logger.info(f"WebRTC client for camera {camera_id} disconnected.")
+    finally:
+        await pc.close()
+        if websocket in webrtc_connections:
+            del webrtc_connections[websocket]
+        if "webrtc_track" in active_cameras.get(camera_id, {}):
+            del active_cameras[camera_id]["webrtc_track"]
+
 
 # Detections
 @api_router.get("/detections", response_model=List[Detection])
